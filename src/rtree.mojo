@@ -1,7 +1,7 @@
 """Flat, caller-allocated, two-dimensional STR-packed R-tree."""
 
-from std.algorithm import parallelize
 from std.math import sqrt
+from std.runtime import initialize_runtime
 from std.sys.info import simd_width_of as simdwidthof
 
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
@@ -83,7 +83,8 @@ def parallel_sort_slices(
         var hi = min(lo + slice_capacity, count)
         heap_sort(ip(order_addr), lo, hi, fp(bounds_addr), 1)
 
-    parallelize[sort_slice](slice_count)
+    for slice_id in range(slice_count):
+        sort_slice(slice_id)
 
 
 def str_order(order: IPtr, count: Int, bounds: FPtr, capacity: Int):
@@ -463,6 +464,7 @@ def mrt_build(
     children_addr: Int,
     order_addr: Int,
 ) abi("C") -> Int:
+    initialize_runtime()
     return build_tree(
         fp(item_bounds_addr),
         n,

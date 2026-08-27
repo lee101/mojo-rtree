@@ -84,19 +84,23 @@ time, so ratios below one mean Mojo is slower.
 
 | workload | mojo-rtree | rtree 1.4.1 | upstream / Mojo |
 |---|---:|---:|---:|
-| STR bulk build + first query (200k boxes) | 511.7 ms | 990.2 ms | 1.93x faster |
-| 2,000 intersection counts | 84.0 ms | 43.0 ms | 0.51x slower |
-| 1,000 nearest-10 queries | 85.9 ms | 63.5 ms | 0.74x slower |
-| intersection_v (1,000 boxes) | 4.3 ms | 16.6 ms | 3.90x faster |
+| STR bulk build + first query (200k boxes) | 448.3 ms | 901.6 ms | 2.01x faster |
+| 2,000 intersection counts | 12.5 ms | 40.6 ms | 3.26x faster |
+| 1,000 nearest-10 queries | 42.7 ms | 63.6 ms | 1.49x faster |
+| intersection_v (1,000 boxes) | 3.3 ms | 13.7 ms | 4.18x faster |
 
-This run shows faster bulk construction and batched intersection, but slower
-scalar intersection counts and nearest queries. Large STR builds sort
-independent y slices in parallel after the x sort, while smaller builds stay
-serial. Scalar counts use a count-only kernel. Nearest queries use a
+This run shows faster bulk construction and all three query workloads. Large
+STR builds sort independent y slices in parallel after the x sort, while
+smaller builds stay serial. Scalar queries reuse ABI-validated addresses for
+the tree and scratch buffers instead of rediscovering every NumPy address on
+every call. Scalar counts use a count-only kernel. Nearest queries use a
 distance-ordered node queue. Batched intersection keeps all query boxes inside
 compiled count-and-fill passes, avoiding per-query Python and FFI overhead.
 
-No GPU path is included or benchmarked.
+No GPU path is included or benchmarked. R-tree traversal is branch-heavy and
+loads bounds, child metadata, and queue state for only a few comparisons or
+arithmetic operations, putting these kernels well below the approximate two
+flops-per-byte threshold where GPU transfer and launch costs could pay off.
 
 ## How it works
 

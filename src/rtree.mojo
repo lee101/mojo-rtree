@@ -1,13 +1,38 @@
 """Flat, caller-allocated, two-dimensional STR-packed R-tree."""
 
 from std.math import sqrt
-from std.runtime import initialize_runtime
+from std.runtime.asyncrt import TaskGroup, initialize_runtime, parallelism_level
 from std.sys.info import simd_width_of as simdwidthof
 
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
 comptime INF = 1.7976931348623157e308
 comptime PARALLEL_BUILD_THRESHOLD = 16384
+
+
+@always_inline
+def parallelize[
+    origins: OriginSet, //, func: def(Int) capturing[origins] -> None
+](num_work_items: Int, max_workers: Int):
+    if num_work_items <= 0:
+        return
+    if num_work_items == 1 or max_workers <= 1:
+        for i in range(num_work_items):
+            func(i)
+        return
+    var num_workers = min(num_work_items, min(max_workers, parallelism_level()))
+    var chunk_size, extra_items = divmod(num_work_items, num_workers)
+
+    async def work_chunk(worker: Int, chunk_size: Int, extra_items: Int):
+        var begin = worker * chunk_size + min(worker, extra_items)
+        var count = chunk_size + Int(worker < extra_items)
+        for i in range(begin, begin + count):
+            func(i)
+
+    var tasks = TaskGroup()
+    for worker in range(num_workers):
+        tasks.create_task(work_chunk(worker, chunk_size, extra_items))
+    tasks.wait()
 
 
 def fp(addr: Int) -> FPtr:
@@ -83,8 +108,7 @@ def parallel_sort_slices(
         var hi = min(lo + slice_capacity, count)
         heap_sort(ip(order_addr), lo, hi, fp(bounds_addr), 1)
 
-    for slice_id in range(slice_count):
-        sort_slice(slice_id)
+    parallelize[sort_slice](slice_count, min(slice_count, 16))
 
 
 def str_order(order: IPtr, count: Int, bounds: FPtr, capacity: Int):

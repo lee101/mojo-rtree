@@ -129,6 +129,8 @@ class Index:
         self._stack = np.empty(0, dtype=np.int64)
         self._queue_distances = np.empty(0, dtype=np.float64)
         self._query = np.empty(4, dtype=np.float64)
+        self._query_addr = _f64_addr(self._query)
+        self._ffi_addrs: tuple[int, ...] | None = None
         if args:
             if len(args) != 1:
                 raise TypeError("Index accepts one in-memory item stream")
@@ -230,6 +232,7 @@ class Index:
             self._node_bounds = np.empty((0, 4), dtype=np.float64)
             self._stack = np.empty(0, dtype=np.int64)
             self._queue_distances = np.empty(0, dtype=np.float64)
+            self._ffi_addrs = None
             self._root = -1
             self._dirty = False
             return
@@ -267,7 +270,22 @@ class Index:
             raise RTreeError("Mojo tree builder returned an invalid root")
         self._stack = np.empty(self._root + 1, dtype=np.int64)
         self._queue_distances = np.empty(self._root + 1, dtype=np.float64)
+        self._ffi_addrs = (
+            _f64_addr(self._bounds_array),
+            _f64_addr(self._node_bounds),
+            _i64_addr(self._node_start),
+            _i64_addr(self._node_size),
+            _i64_addr(self._node_leaf),
+            _i64_addr(self._children),
+            _i64_addr(self._stack),
+            _f64_addr(self._queue_distances),
+        )
         self._dirty = False
+
+    def _tree_addrs(self) -> tuple[int, ...]:
+        if self._ffi_addrs is None:
+            raise RTreeError("R-tree buffers are unavailable")
+        return self._ffi_addrs
 
     def _intersection_positions(self, coordinates: Any) -> np.ndarray:
         self._check_open()
@@ -277,18 +295,19 @@ class Index:
         if n == 0:
             return np.empty(0, dtype=np.int64)
         result = np.empty(n, dtype=np.int64)
+        bounds, nodes, starts, sizes, leaves, children, stack, _ = self._tree_addrs()
         count = int(
             lib().mrt_intersection(
-                _f64_addr(self._bounds_array),
-                _f64_addr(self._node_bounds),
-                _i64_addr(self._node_start),
-                _i64_addr(self._node_size),
-                _i64_addr(self._node_leaf),
-                _i64_addr(self._children),
+                bounds,
+                nodes,
+                starts,
+                sizes,
+                leaves,
+                children,
                 self._root,
-                _f64_addr(self._query),
+                self._query_addr,
                 _i64_addr(result),
-                _i64_addr(self._stack),
+                stack,
             )
         )
         if count < 0 or count > n:
@@ -303,17 +322,18 @@ class Index:
         self._rebuild()
         if not self._ids:
             return 0
+        bounds, nodes, starts, sizes, leaves, children, stack, _ = self._tree_addrs()
         count = int(
             lib().mrt_intersection_count(
-                _f64_addr(self._bounds_array),
-                _f64_addr(self._node_bounds),
-                _i64_addr(self._node_start),
-                _i64_addr(self._node_size),
-                _i64_addr(self._node_leaf),
-                _i64_addr(self._children),
+                bounds,
+                nodes,
+                starts,
+                sizes,
+                leaves,
+                children,
                 self._root,
-                _f64_addr(self._query),
-                _i64_addr(self._stack),
+                self._query_addr,
+                stack,
             )
         )
         if count < 0 or count > len(self._ids):
@@ -329,21 +349,24 @@ class Index:
             return np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64)
         result = np.empty(k, dtype=np.int64)
         distances = np.empty(k, dtype=np.float64)
+        bounds, nodes, starts, sizes, leaves, children, stack, queue_distances = (
+            self._tree_addrs()
+        )
         found = int(
             lib().mrt_nearest(
-                _f64_addr(self._bounds_array),
-                _f64_addr(self._node_bounds),
-                _i64_addr(self._node_start),
-                _i64_addr(self._node_size),
-                _i64_addr(self._node_leaf),
-                _i64_addr(self._children),
+                bounds,
+                nodes,
+                starts,
+                sizes,
+                leaves,
+                children,
                 self._root,
-                _f64_addr(self._query),
+                self._query_addr,
                 k,
                 _i64_addr(result),
                 _f64_addr(distances),
-                _i64_addr(self._stack),
-                _f64_addr(self._queue_distances),
+                stack,
+                queue_distances,
             )
         )
         if found < 0 or found > k:

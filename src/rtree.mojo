@@ -1,38 +1,12 @@
 """Flat, caller-allocated, two-dimensional STR-packed R-tree."""
 
 from std.math import sqrt
-from std.runtime.asyncrt import TaskGroup, initialize_runtime, parallelism_level
 from std.sys.info import simd_width_of as simdwidthof
 
 comptime FPtr = UnsafePointer[Float64, AnyOrigin[mut=True]]
 comptime IPtr = UnsafePointer[Int64, AnyOrigin[mut=True]]
 comptime INF = 1.7976931348623157e308
-comptime PARALLEL_BUILD_THRESHOLD = 16384
 
-
-@always_inline
-def parallelize[
-    origins: OriginSet, //, func: def(Int) capturing[origins] -> None
-](num_work_items: Int, max_workers: Int):
-    if num_work_items <= 0:
-        return
-    if num_work_items == 1 or max_workers <= 1:
-        for i in range(num_work_items):
-            func(i)
-        return
-    var num_workers = min(num_work_items, min(max_workers, parallelism_level()))
-    var chunk_size, extra_items = divmod(num_work_items, num_workers)
-
-    async def work_chunk(worker: Int, chunk_size: Int, extra_items: Int):
-        var begin = worker * chunk_size + min(worker, extra_items)
-        var count = chunk_size + Int(worker < extra_items)
-        for i in range(begin, begin + count):
-            func(i)
-
-    var tasks = TaskGroup()
-    for worker in range(num_workers):
-        tasks.create_task(work_chunk(worker, chunk_size, extra_items))
-    tasks.wait()
 
 
 def fp(addr: Int) -> FPtr:
@@ -95,21 +69,6 @@ def heap_sort(order: IPtr, lo: Int, hi: Int, bounds: FPtr, axis: Int):
         end -= 1
 
 
-def parallel_sort_slices(
-    order_addr: Int,
-    count: Int,
-    bounds_addr: Int,
-    slice_capacity: Int,
-    slice_count: Int,
-):
-    @parameter
-    def sort_slice(slice_id: Int):
-        var lo = slice_id * slice_capacity
-        var hi = min(lo + slice_capacity, count)
-        heap_sort(ip(order_addr), lo, hi, fp(bounds_addr), 1)
-
-    parallelize[sort_slice](slice_count, min(slice_count, 16))
-
 
 def str_order(order: IPtr, count: Int, bounds: FPtr, capacity: Int):
     if count < 2:
@@ -118,26 +77,14 @@ def str_order(order: IPtr, count: Int, bounds: FPtr, capacity: Int):
     var slices = Int(sqrt(Float64(groups)))
     if slices < 1:
         slices = 1
-    while slices * slices < groups:
-        slices += 1
     var groups_per_slice = (groups + slices - 1) // slices
     var slice_capacity = groups_per_slice * capacity
     heap_sort(order, 0, count, bounds, 0)
     var slice_count = (count + slice_capacity - 1) // slice_capacity
-
-    @parameter
-    def sort_slice(slice_id: Int):
+    for slice_id in range(slice_count):
         var lo = slice_id * slice_capacity
         var hi = min(lo + slice_capacity, count)
         heap_sort(order, lo, hi, bounds, 1)
-
-    if count >= PARALLEL_BUILD_THRESHOLD and slice_count > 1:
-        parallel_sort_slices(
-            Int(order), count, Int(bounds), slice_capacity, slice_count
-        )
-    else:
-        for slice_id in range(slice_count):
-            sort_slice(slice_id)
 
 
 def copy_bounds(src: FPtr, src_id: Int, dst: FPtr, dst_id: Int):
@@ -488,7 +435,6 @@ def mrt_build(
     children_addr: Int,
     order_addr: Int,
 ) abi("C") -> Int:
-    initialize_runtime()
     return build_tree(
         fp(item_bounds_addr),
         n,

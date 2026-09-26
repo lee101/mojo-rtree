@@ -48,7 +48,7 @@ def build(force: bool = False) -> str:
 
 
 _instance: ctypes.CDLL | None = None
-_cpu_device: int | None = None
+
 
 
 def lib() -> ctypes.CDLL:
@@ -61,18 +61,6 @@ def lib() -> ctypes.CDLL:
             fn.restype = restype
     return _instance
 
-
-def ensure_parallel_runtime() -> None:
-    global _cpu_device
-    if _cpu_device is None:
-        runtime = lib()
-        get_device = runtime.KGEN_CompilerRT_AsyncRT_GetOrCreateCPUDevice
-        get_device.argtypes = []
-        get_device.restype = ctypes.c_void_p
-        _cpu_device = get_device()
-        if not _cpu_device:
-            _cpu_device = None
-            raise RuntimeError("Mojo parallel runtime did not provide a CPU device")
 
 
 def addr(array: np.ndarray, dtype: np.dtype) -> int:

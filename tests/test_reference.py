@@ -3,7 +3,7 @@
 import numpy as np
 
 from mojo_rtree import Index
-from mojo_rtree.index import _PARALLEL_BUILD_THRESHOLD
+
 
 
 def test_fuzz_intersection_against_brute_force():
@@ -40,8 +40,8 @@ def test_nearest_simd_tail():
     assert list(tree.nearest(query, 5)) == expected.tolist()
 
 
-def test_parallel_build_threshold_edges():
-    for n in (_PARALLEL_BUILD_THRESHOLD - 1, _PARALLEL_BUILD_THRESHOLD + 1):
+def test_build_edges_across_the_old_parallel_threshold():
+    for n in (16_383, 16_385):
         x = np.arange(n, dtype=np.float64)
         tree = Index(
             (i, (x[i], x[i] % 97, x[i] + 0.5, x[i] % 97 + 0.5), None)

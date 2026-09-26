@@ -9,7 +9,7 @@ from typing import Any, Iterable, Iterator, Literal, Sequence
 
 import numpy as np
 
-from ._lib import addr, ensure_parallel_runtime, lib
+from ._lib import addr, lib
 from .core import RTreeError
 
 RT_RTree = 0
@@ -18,7 +18,6 @@ RT_Quadratic = 1
 RT_Star = 2
 RT_Memory = 0
 RT_Disk = 1
-_PARALLEL_BUILD_THRESHOLD = 16384
 _I64 = np.dtype(np.int64)
 _F64 = np.dtype(np.float64)
 _I64_MIN = np.iinfo(np.int64).min
@@ -251,8 +250,6 @@ class Index:
         self._node_leaf = np.empty(max_nodes, dtype=np.int64)
         self._children = np.empty(max_edges, dtype=np.int64)
         order = np.empty(n, dtype=np.int64)
-        if n >= _PARALLEL_BUILD_THRESHOLD:
-            ensure_parallel_runtime()
         self._root = int(
             lib().mrt_build(
                 _f64_addr(self._bounds_array),

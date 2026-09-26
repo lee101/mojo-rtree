@@ -106,8 +106,11 @@ flops-per-byte threshold where GPU transfer and launch costs could pay off.
 
 Construction uses sort-tile-recursive packing. Entries are sorted by rectangle
 center along x, divided into slices, sorted by y inside each slice, and packed
-into bounded leaf nodes. Large independent slice sorts are parallelized behind
-a size threshold. Bounds copies and extensions use native-width float64 SIMD
+into bounded leaf nodes. Slice sorts run serially: Mojo 1.2.0 removed
+`std.runtime.asyncrt`, and heap sorting a slice is a pointer-chasing
+permutation with roughly one comparison per eight bytes touched, so there is no
+arithmetic intensity to spread across cores. Bounds copies and extensions use
+native-width float64 SIMD
 with scalar remainder handling. The same process packs successive internal
 levels until one root remains. Intersection traversal prunes non-overlapping
 node bounding boxes. Nearest traversal visits nodes in minimum-distance order

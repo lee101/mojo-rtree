@@ -93,7 +93,7 @@ def copy_bounds(src: FPtr, src_id: Int, dst: FPtr, dst_id: Int):
     var db = dst_id * 4
     var d = 0
     while d + W <= 4:
-        dst.store(db + d, src.load[width=W](sb + d))
+        dst.store(db + d, src.unsafe_load[width=W](sb + d))
         d += W
     while d < 4:
         dst[db + d] = src[sb + d]
@@ -105,8 +105,8 @@ def extend_bounds(dst: FPtr, dst_id: Int, src: FPtr, src_id: Int):
     var sb = src_id * 4
     comptime W = simdwidthof[DType.float64]()
     comptime if W == 4:
-        var current = dst.load[width=W](db)
-        var incoming = src.load[width=W](sb)
+        var current = dst.unsafe_load[width=W](db)
+        var incoming = src.unsafe_load[width=W](sb)
         var merged = min(current, incoming)
         var upper = max(current, incoming)
         merged[2] = upper[2]
@@ -191,8 +191,8 @@ def overlaps(a: FPtr, ai: Int, b: FPtr, bi: Int) -> Bool:
     var bb = bi * 4
     comptime W = simdwidthof[DType.float64]()
     comptime if W == 4:
-        var av = a.load[width=W](aa)
-        var bv = b.load[width=W](bb)
+        var av = a.unsafe_load[width=W](aa)
+        var bv = b.unsafe_load[width=W](bb)
         var separated = av.gt(bv.shuffle[2, 3, 0, 1]()) | bv.gt(
             av.shuffle[2, 3, 0, 1]()
         )
